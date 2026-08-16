@@ -680,4 +680,56 @@ describe('AgentDetector', () => {
       expect(b.getLastAgent()).toBeNull();
     });
   });
+
+  // A weak gate is a substring tested against the whole chunk — `/codex /`,
+  // `/gemini /`, `/opencode/` — which ordinary conversation satisfies. That is
+  // survivable only while ownership can come back; with the owner-only pattern
+  // pass it would otherwise be permanent, and the pane would carry the wrong
+  // agent for the rest of the session.
+  describe('pane ownership survives a passing mention of another agent', () => {
+    function identitySequence(lines: string[]): string[] {
+      const det = new AgentDetector();
+      const seen: string[] = [];
+      det.onEvent((ev) => {
+        if (ev.agent && seen[seen.length - 1] !== ev.agent) seen.push(ev.agent);
+      });
+      for (const line of lines) det.feed(`${line}\n`);
+      return seen;
+    }
+
+    for (const [label, mention] of [
+      ['codex', 'I will run codex review on this diff'],
+      ['gemini', 'compare with gemini output please'],
+      ['opencode', 'the opencode plugin does this'],
+    ]) {
+      it(`a Claude pane that says "${label}" comes back to Claude`, () => {
+        const seq = identitySequence([
+          'Claude Code v2.1.172',
+          '  bypass permissions on',
+          mention,
+          '  shift+tab to cycle modes',
+        ]);
+        expect(seq[0]).toBe('Claude Code');
+        // The mention may still emit — tightening those gates is separate work.
+        // What must hold is that Claude ends up owning the pane again.
+        expect(seq[seq.length - 1]).toBe('Claude Code');
+      });
+    }
+
+    // The other direction, which is what the line-level chrome work bought:
+    // chrome-proven ownership is NOT handed back by quoted source.
+    it('a Grok pane reading Claude chrome from a file stays Grok', () => {
+      const seq = identitySequence([
+        'Grok 4.6 is here!',
+        'Help improve Grok [Opt out]',
+        'reading: Claude Code banner text',
+        '  bypass permissions on',
+      ]);
+      expect(seq).toEqual(['Grok']);
+    });
+
+    it('still identifies a real Codex pane', () => {
+      expect(identitySequence(['OpenAI Codex', 'codex> '])).toContain('Codex CLI');
+    });
+  });
 });

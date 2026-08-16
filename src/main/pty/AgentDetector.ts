@@ -137,6 +137,12 @@ const SOURCE_LINE_RE = /[=;{}]|const |let |var |function |det\.feed|\/(?:bypass|
 // exactly how the two drift apart again.
 let CLAUDE_WAITING_PATTERNS: RegExp[] = [];
 
+/** Agents whose gate is decided by TUI chrome examined LINE BY LINE, not by a
+ *  substring anywhere in the chunk. Only these may take the pane away from
+ *  another chrome-proven owner — see the ownership note in checkGates. Keep in
+ *  step with the per-slug branches there. */
+const CHROME_PROVEN_AGENTS: ReadonlySet<string> = new Set(['Claude Code', 'Kiro CLI', 'Grok']);
+
 const AGENT_PATTERNS: AgentPattern[] = [
   // ── Claude Code ────────────────────────────────────────────────────────────
   // Gate: compound — banner AND prompt (checkGates handles the two-signal
@@ -666,7 +672,26 @@ export class AgentDetector {
       if (!gateMatched) continue;
 
       this.activeAgents.add(ap.agent);
-      this.lastAgent = ap.agent;
+      // Activation and OWNERSHIP are not the same thing.
+      //
+      // The gates are not equally strong. claude / kiro / grok prove identity
+      // from TUI chrome examined line by line; the rest are bare substrings
+      // tested against the whole chunk (`/codex /`, `/gemini /`, `/opencode/`),
+      // which ordinary prose satisfies — "I will run codex review on this
+      // diff" is enough. That was survivable while the pattern pass could hand
+      // ownership back on the next footer line. It is not survivable now that
+      // the pass below refuses to look at any agent but the owner: a sentence
+      // takes the pane and nothing gives it back for the rest of the session.
+      //
+      // So a weak gate may activate (its own patterns still work if it really
+      // is that agent) but may not take the pane from an owner that earned it
+      // with chrome. Tightening the weak gates themselves is the real fix and
+      // is tracked separately; this keeps the loss recoverable meanwhile.
+      const ownerIsChromeProven = this.lastAgent != null
+        && CHROME_PROVEN_AGENTS.has(this.lastAgent);
+      if (!this.lastAgent || CHROME_PROVEN_AGENTS.has(ap.agent) || !ownerIsChromeProven) {
+        this.lastAgent = ap.agent;
+      }
       for (const cb of this.callbacks) {
         cb({ agent: ap.agent, status: 'running', message: 'Agent started' });
       }

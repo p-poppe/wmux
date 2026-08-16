@@ -35,6 +35,7 @@ import { ReviewTab } from '../Deck/ReviewTab';
 import { MODEL_OPTIONS } from '../Deck/OrchestratorModelChip';
 import WebToggle from '../StatusBar/WebToggle';
 import { FOCUS_RING } from '../focusRing';
+import FanOutTrigger from '../AgentToolbar/FanOutTrigger';
 
 // ─── Command Deck (Phase 1 P1a) ───────────────────────────────────────────────
 //
@@ -62,6 +63,9 @@ export default function ChannelDock(): React.ReactElement {
   const setDeckBrainModel = useStore((s) => s.setDeckBrainModel);
   const commanderModelLabel = (MODEL_OPTIONS.find((o) => o.value === deckBrainModel) ?? MODEL_OPTIONS[0]).label;
   const t = useT();
+  const sidebarVisible = useStore((s) => s.sidebarVisible);
+  const injectEnabled = useStore((s) => s.agentToolbarEnabled);
+  const activeWorkspaceId = useStore((s) => s.activeWorkspaceId);
   const showChannelsView = activeDeckTab === 'channels' && channelsTabVisible;
   // git 탭(오너 결정 2026-07-20 — 덱 복귀, Review는 Git 탭 하단 섹션으로 병합).
   const showGitView = activeDeckTab === 'git';
@@ -101,6 +105,9 @@ export default function ChannelDock(): React.ReactElement {
         afterTabs={<WebToggle />}
         rightSlot={
           <>
+            {injectEnabled && !sidebarVisible && activeWorkspaceId && (
+              <FanOutTrigger workspaceId={activeWorkspaceId} variant="auto" compact />
+            )}
             {/* Collapse the whole dock (terminals reclaim the width); reopen
                 from the StatusBar dock toggle. Arrow points toward the edge the
                 dock sits on. */}
